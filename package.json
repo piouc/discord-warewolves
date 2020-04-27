@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "develop": "ts-node-dev src/index.ts --respawn --ignore-watch node_modules src/index.ts"
+    "develop": "ts-node-dev -r dotenv/config src/index.ts --respawn --ignore-watch node_modules src/index.ts"
   },
   "keywords": [],
   "author": "",
@@ -16,6 +16,7 @@
   },
   "devDependencies": {
     "@types/node": "^13.13.4",
+    "dotenv": "^8.2.0",
     "ts-node": "^8.9.1",
     "ts-node-dev": "^1.0.0-pre.44"
   }
