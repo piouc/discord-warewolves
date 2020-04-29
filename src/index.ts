@@ -8,28 +8,46 @@ client.on('ready', () => {
   console.log('ready...')
 })
 
+const jobMap: {[x: string]: Job} = {
+  '村': Job.Villagger,
+  '占': Job.Seer,
+  '盗': Job.Thief,
+  '狼': Job.Warewolf,
+  '吊': Job.Hangman,
+  '狂': Job.Madman
+}
+
 client.on('message', async message => {
   if(message.author.bot){
     return
   } else {
-    if(message.content === '\\onw' && message.channel instanceof TextChannel){
-      const selectPlayerCountMessage = await message.channel.send('ワンナイト人狼を開始します。\n参加する人数のアイコンをクリックしてください。');
-      const playerCount = await waitForReact(selectPlayerCountMessage, new Map([
-        ['4️⃣', 4],
-        ['5️⃣', 5],
-        ['6️⃣', 6],
-        ['7️⃣', 7],
-        ['8️⃣', 8],
-        ['9️⃣', 9],
-        ['🔟', 10],
-      ]))
-      message.channel.send(`参加人数は${playerCount}人です`)
-      const players = await waitForEntry(message.channel, 2)
+    if(/^\\onw/.test(message.content)  && message.channel instanceof TextChannel){
+      const jobs = message.content.match(/^\\onw ([村占盗狼吊狂]+)/)?.[1].split('').map(str => jobMap[str])
+      if(!jobs || jobs.length < 3) {
+        await message.channel.send(`Help
+
+\\onw {役職リスト}
+※役職数の合計は、プレイヤー数+2のしてください。
+
+例)4プレイヤー
+\\onw 村村占盗狼狼
+
+・役職リスト
+村：村人
+占：占い師
+盗：怪盗
+狼：人狼
+狂：狂人
+吊：吊り人`)
+        return
+      }
+      message.channel.send(`プレイヤーは${jobs.length -2}人です。`)
+      const players = await waitForEntry(message.channel, jobs.length -2)
 
       const village = new Village({
         channel: message.channel,
         client,
-        jobs: [Job.Villagger, Job.Villagger, Job.Seer, Job.Thief, Job.Warewolf, Job.Warewolf],
+        jobs,
         owner: message.author,
         users: players
       })
@@ -61,7 +79,7 @@ async function waitForReact<T>(message: Message, emojiMap: Map<string, T>): Prom
 
 function waitForEntry(channel: TextChannel, limit: number): Promise<User[]> {
   return new Promise(async (resolve) => {
-    const entryMessage = await channel.send('参加者を待っています.\n参加者は:raised_hand:をクリックしてください。')
+    const entryMessage = await channel.send('プレイヤーの参加を待っています。\n:raised_hand:をクリックしてください。')
     const botUser = entryMessage.author
     const client = channel.client
     const listener = async (reaction: MessageReaction) => {
@@ -71,7 +89,7 @@ function waitForEntry(channel: TextChannel, limit: number): Promise<User[]> {
           .filter(user => user.id !== botUser.id)
           .map(user => user)
         if(users && users.length >= limit){
-          await entryMessage.edit('Entry closed.')
+          await entryMessage.edit('募集を終了しました。')
           resolve(users)
           client.off('messageReactionAdd', listener)
           client.off('messageReactionRemove', listener)
