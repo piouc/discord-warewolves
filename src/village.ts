@@ -87,7 +87,20 @@ export class Village {
 
     const [jobMap, unassignedJobs] = randomAssign(users, jobs)
     this.players = [...jobMap].map(([user, job]) => new Player({user, job}))
+    console.log(this.players, jobMap, unassignedJobs)
     this.unassignedJobs = unassignedJobs
+
+    this.channel.send(`【今回の役職】
+・村人：${this.jobs.filter(job => job === Job.Villagger).length}
+・占い師：${this.jobs.filter(job => job === Job.Seer).length}
+・怪盗：${this.jobs.filter(job => job === Job.Thief).length}
+・人狼：${this.jobs.filter(job => job === Job.Warewolf).length}
+・狂人：${this.jobs.filter(job => job === Job.Madman).length}
+・吊り人：${this.jobs.filter(job => job === Job.Hangman).length}
+
+【今回の参加者】
+${this.players.map(player => `・${player.name}`).join('\n')}
+    `.replace(/^\s+/g, ''))
   }
 
   async start(){
@@ -98,10 +111,9 @@ export class Village {
       switch(player.job){
 
         case Job.Villagger:
-          await player.send('あなたの役職は "村人" です')
           await this.waitForReact({
             emojiMap: new Map([['👌', null]]),
-            message: '確認したら👌をクリックしてください。',
+            message: 'あなたの役職は "村人" です\n確認したら👌をクリックしてください。',
             target: player.user
           })
           return
@@ -113,9 +125,8 @@ export class Village {
             message: 'あなたの役職は "占い師" です。\n誰を占いますか?',
             valueResolver: player => player ? player.name : '欠けた2つの役職'
           })
-
           if(divinedPlayer){
-            await player.send(`”${divinedPlayer.name}” は ”${player.job}” です。`)
+            await player.send(`”${divinedPlayer.name}” は ”${divinedPlayer.originalJob}” です。`)
           } else {
             await player.send(`割り当てられなかった役職は ${this.unassignedJobs.map(job => `"${job}"`).join('・')} です。`)
           }
@@ -137,28 +148,25 @@ export class Village {
 
         case Job.Warewolf:
           const otherWarewolf = otherPlayers.filter(player => player.job === Job.Warewolf)
-          await player.send(`あなたの役職は "人狼" です。\n仲間の人狼は ${otherWarewolf.length > 0 ? otherWarewolf.map(player => `"${player.name}"`).join('・') + ' です。' : 'いません。'}`)
           await this.waitForReact({
             emojiMap: new Map([['👌', null]]),
-            message: '確認したら👌をクリックしてください。',
+            message: `あなたの役職は "人狼" です。\n仲間の人狼は ${otherWarewolf.length > 0 ? otherWarewolf.map(player => `"${player.name}"`).join('・') + ' です。' : 'いません。'}\n確認したら👌をクリックしてください。`,
             target: player.user
           })
           return
 
         case Job.Hangman:
-          await player.send('あなたの役職は "吊り人" です。')
           await this.waitForReact({
             emojiMap: new Map([['👌', null]]),
-            message: '確認したら👌をクリックしてください。',
+            message: `あなたの役職は "吊り人" です。\n確認したら👌をクリックしてください。`,
             target: player.user
           })
           return
         
         case Job.Madman:
-          await player.send('あなたの役職は "狂人" です。')
           await this.waitForReact({
             emojiMap: new Map([['👌', null]]),
-            message: '確認したら👌をクリックしてください。',
+            message: `あなたの役職は "狂人" です。\n確認したら👌をクリックしてください。`,
             target: player.user
           })
           return
@@ -174,24 +182,43 @@ export class Village {
       }
     }))
 
-    await this.channel.send(`議論タイムを開始します。\n${this.players.length}分`)
-    // await wait(1000 * 60 * this.players.length)
-    await this.channel.send(`議論タイムを終了します。`)
+    const endTime = Date.now() + 1000 * 60 * this.players.length
+    let terminated = false
+    this.waitForReact({
+      message: `${this.players.length}分間の議論タイムを開始します。\n停止する場合は🚫をクリックしてください。`,
+      emojiMap: new Map([['🚫', true]]),
+      target: this.channel
+    }).then(() => {
+      terminated = true
+    })
+    const timeMessage = await this.channel.send('test')
+    while(Date.now() < endTime && !terminated){
+      const w = wait(5000)
+      await timeMessage.edit(`残り時間 ${formatTime(endTime - Date.now())}`)
+      await w
+    }
+    await timeMessage.delete()
+
+    await this.channel.send(`議論タイムを終了します。\nDMにて投票先のリアクションを押してください。`)
 
     const votes: VoteMap = new Map(await Promise.all(this.players.map<Promise<[Player, Player]>>(async player => {
       const otherPlayers = excludePlayer(this.players, player)
+      const vote = await this.waitForSelect({
+        target: player.user,
+        message: 'だれを処刑しますか?',
+        emojiMap: createEmojiMap(otherPlayers),
+        valueResolver: player => player.name
+      })
+      await player.send(`投票が完了しました。\n全員の投票が完了すると <#${this.channel.id}> に結果が表示されます。`)
       return [
         player,
-        await this.waitForSelect({
-          target: player.user,
-          message: 'だれを処刑しますか?',
-          emojiMap: createEmojiMap(otherPlayers),
-          valueResolver: player => player.name
-        })
+        vote
       ]
     })))
     
-
+    const voteCompleteMessage = await this.channel.send('投票が完了しました。')
+    await wait(10000)
+    await voteCompleteMessage.delete()
 
     const voteCount = count([...votes.values()])
     this.maxVoteCount = Math.max(...voteCount.values())
@@ -209,7 +236,7 @@ export class Village {
       this.winners = this.executedPlayers.length === 0　? this.players.filter(byJob([Job.Villagger, Job.Seer, Job.Thief, Job.Madman])) : this.players.filter(byJob([Job.Villagger, Job.Seer, Job.Thief]))
       this.winTeam = Team.Villagger
     } else if(this.players.some(byJob([Job.Warewolf])) && !this.executedPlayers.some(byJob([Job.Warewolf]))){
-      this.winners = this.players.filter(player => [Job.Warewolf].includes(player.job))
+      this.winners = this.players.filter(player => [Job.Warewolf, Job.Madman].includes(player.job))
       this.winTeam = Team.Warewolf
     } else {
       this.winners = []
@@ -220,10 +247,16 @@ export class Village {
     } else {
       await this.channel.send('投票の結果、だれも処刑されませんでした。')
     }
-    await this.channel.send(`・・・
-**【${this.winTeam? this.winTeam + 'が勝利しました！' : '勝利プレイヤーはいませんでした'}】**
+    await wait(10000)
+    await this.channel.send(`**【${this.winTeam? this.winTeam + 'が勝利しました！' : '全員負けです！'}】**`)
+    await wait(10000)
+    await this.channel.send(`【勝利プレイヤー】
+${this.winners.length < 1 ? 'いない' : this.winners.map(player => `・${player.name}`).join('\n')}
 
-勝利プレイヤーは ${this.winners.length < 1 ? 'いない' : this.winners.map(player => player.name).map(quote).join('・')} です。
+【投票先】
+${[...votes].map(([player, target]) => {
+  return `・${player.name} → ${target.name}`
+}).join('\n')}
 
 【役職の割り当て】
 ${this.players.map(player => {
@@ -328,4 +361,10 @@ function wait(ms: number): Promise<void>{
   return new Promise(resolve => {
     setTimeout(resolve, ms)
   })
+}
+
+function formatTime(ms: number){
+  const minutes = Math.floor(ms / (1000 * 60))
+  const seconds = Math.floor(ms / 1000 % 60)
+  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
 }

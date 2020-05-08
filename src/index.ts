@@ -10,11 +10,17 @@ client.on('ready', () => {
 
 const jobMap: {[x: string]: Job} = {
   '村': Job.Villagger,
+  'V': Job.Villagger,
   '占': Job.Seer,
+  'S': Job.Seer,
   '盗': Job.Thief,
+  'T': Job.Thief,
   '狼': Job.Warewolf,
+  'W': Job.Warewolf,
   '吊': Job.Hangman,
-  '狂': Job.Madman
+  'H': Job.Hangman,
+  '狂': Job.Madman,
+  'M': Job.Madman
 }
 
 client.on('message', async message => {
@@ -22,7 +28,7 @@ client.on('message', async message => {
     return
   } else {
     if(/^\\onw/.test(message.content)  && message.channel instanceof TextChannel){
-      const jobs = message.content.match(/^\\onw ([村占盗狼吊狂]+)/)?.[1].split('').map(str => jobMap[str])
+      const jobs = message.content.match(/^\\onw ([村占盗狼吊狂VSTWMH]+)/)?.[1].split('').map(str => jobMap[str])
       if(!jobs || jobs.length < 3) {
         await message.channel.send(`Help
 
@@ -33,15 +39,15 @@ client.on('message', async message => {
 \\onw 村村占盗狼狼
 
 ・役職リスト
-村：村人
-占：占い師
-盗：怪盗
-狼：人狼
-狂：狂人
-吊：吊り人`)
+村,V：村人
+占,S：占い師
+盗,T：怪盗
+狼,W：人狼
+狂,M：狂人
+吊,H：吊り人`)
         return
       }
-      message.channel.send(`プレイヤーは${jobs.length -2}人です。`)
+      await message.channel.send(`プレイヤーは${jobs.length -2}人です。`)
       const players = await waitForEntry(message.channel, jobs.length -2)
 
       const village = new Village({
